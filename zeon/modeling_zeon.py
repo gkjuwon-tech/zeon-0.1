@@ -26,6 +26,7 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from zeon.config import ZeonConfig
 from zeon.halting import HaltingHead, halt_entropy_bonus, ponder_combine, ponder_kl_loss
+from zeon.workspace import WorkspaceBank
 
 
 # Type aliases — outer-layer KV cache is a tuple of N (k, v) per layer.
@@ -460,6 +461,10 @@ class ZeonBlock(nn.Module):
             self.cross_step = CrossStepMemory(cfg.hidden_size)
         else:
             self.cross_step = None
+        if cfg.use_workspace:
+            self.workspace = WorkspaceBank(cfg)
+        else:
+            self.workspace = None
         self.gradient_checkpointing = False
 
     def forward(
@@ -472,6 +477,8 @@ class ZeonBlock(nn.Module):
         kv_caches: list[Optional[LayerKV]] = [None] * len(self.cores)
         hiddens, lambdas = [], []
         history: list[torch.Tensor] = []  # rolling window of recent hidden states
+        workspace = self.workspace.init_state(h) if self.workspace is not None else None
+        div_loss_acc = torch.zeros((), device=h.device, dtype=h.dtype)
 
         for step in range(cfg.max_recurrent_steps):
             current = h
@@ -494,6 +501,11 @@ class ZeonBlock(nn.Module):
                 hist = torch.stack(window, dim=2)
                 current = self.cross_step(current, hist)
 
+            if self.workspace is not None:
+                current, workspace = self.workspace.step(current, workspace)
+                if self.training:
+                    div_loss_acc = div_loss_acc + self.workspace.diversity_loss(workspace)
+
             h = current
             history.append(h)
             # Trim eagerly to bound activation memory under long K.
@@ -514,6 +526,9 @@ class ZeonBlock(nn.Module):
         ponder_loss = ponder_kl_loss(p, cfg.ponder_lambda_p)
         entropy = halt_entropy_bonus(p)
         ponder_loss = ponder_loss - cfg.halt_entropy_weight * entropy
+        if self.workspace is not None and self.training:
+            steps_used = max(len(lambdas), 1)
+            ponder_loss = ponder_loss + cfg.workspace_diversity_weight * (div_loss_acc / steps_used)
         return h_out, ponder_loss
 
 
@@ -551,7 +566,7 @@ class ZeonPreTrainedModel(PreTrainedModel):
     config_class = ZeonConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["TransformerBlock", "ZeonBlock", "RecurrentCore"]
+    _no_split_modules = ["TransformerBlock", "ZeonBlock", "RecurrentCore", "WorkspaceBank"]
     _supports_cache_class = False  # we use the legacy tuple cache format
 
     def _init_weights(self, module):
@@ -564,6 +579,10 @@ class ZeonPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        # `WorkspaceBank` keeps its `output_alpha` scalar at exactly 0
+        # so that `use_workspace=True` is a no-op at init — `torch.zeros`
+        # in __init__ is correct; `_init_weights` skips Parameters and
+        # nothing here overrides it.
 
     def _set_gradient_checkpointing(self, module, value: bool = False):
         if isinstance(module, ZeonBlock):

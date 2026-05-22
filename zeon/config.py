@@ -33,6 +33,12 @@ class ZeonConfig(PretrainedConfig):
         use_step_embedding: bool = True,
         cross_step_memory: bool = True,
         cross_step_memory_window: int = 4,
+        # ----- Phase 1: Workspace Bank -----
+        use_workspace: bool = True,
+        workspace_num_slots: int = 16,
+        workspace_num_heads: int = 4,
+        workspace_diversity_weight: float = 1e-3,
+        workspace_sticky_bias_init: float = 2.0,
         freeze_ffn: bool = True,
         freeze_embed: bool = True,
         freeze_lm_head: bool = True,
@@ -69,6 +75,11 @@ class ZeonConfig(PretrainedConfig):
         self.use_step_embedding = use_step_embedding
         self.cross_step_memory = cross_step_memory
         self.cross_step_memory_window = cross_step_memory_window
+        self.use_workspace = use_workspace
+        self.workspace_num_slots = workspace_num_slots
+        self.workspace_num_heads = workspace_num_heads
+        self.workspace_diversity_weight = workspace_diversity_weight
+        self.workspace_sticky_bias_init = workspace_sticky_bias_init
         self.freeze_ffn = freeze_ffn
         self.freeze_embed = freeze_embed
         self.freeze_lm_head = freeze_lm_head
