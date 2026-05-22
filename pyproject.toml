@@ -1,0 +1,42 @@
+[project]
+name = "zeon"
+version = "0.1.0"
+description = "ZEON — Recurrent-depth transformer with adaptive compute. Trade context length for reasoning depth."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "zeon team" }]
+license = { text = "Apache-2.0" }
+dependencies = [
+    "torch>=2.3",
+    "transformers>=4.45",
+    "accelerate>=0.34",
+    "datasets>=2.20",
+    "safetensors>=0.4",
+    "einops>=0.8",
+]
+
+[project.optional-dependencies]
+train = [
+    "wandb>=0.17",
+    "deepspeed>=0.14",
+    "peft>=0.12",
+]
+eval = [
+    "lm-eval>=0.4",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "pytest-xdist>=3",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["zeon*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
