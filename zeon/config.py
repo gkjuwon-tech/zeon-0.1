@@ -29,7 +29,10 @@ class ZeonConfig(PretrainedConfig):
         ponder_lambda_p: float = 0.2,
         halt_entropy_weight: float = 1e-3,
         share_recurrent_weights: bool = True,
-        recurrent_state_mix: str = "residual",  # residual | gated | film
+        recurrent_state_mix: str = "gated",  # residual | gated
+        use_step_embedding: bool = True,
+        cross_step_memory: bool = True,
+        cross_step_memory_window: int = 4,
         freeze_ffn: bool = True,
         freeze_embed: bool = True,
         freeze_lm_head: bool = True,
@@ -63,6 +66,9 @@ class ZeonConfig(PretrainedConfig):
         self.halt_entropy_weight = halt_entropy_weight
         self.share_recurrent_weights = share_recurrent_weights
         self.recurrent_state_mix = recurrent_state_mix
+        self.use_step_embedding = use_step_embedding
+        self.cross_step_memory = cross_step_memory
+        self.cross_step_memory_window = cross_step_memory_window
         self.freeze_ffn = freeze_ffn
         self.freeze_embed = freeze_embed
         self.freeze_lm_head = freeze_lm_head

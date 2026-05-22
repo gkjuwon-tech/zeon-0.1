@@ -280,6 +280,73 @@ class RecurrentAttention(nn.Module):
         return self.o_proj(attn), cached_kv
 
 
+class StepEmbedding(nn.Module):
+    """Encodes which thinking step the model is currently performing.
+
+    Combines a fixed sinusoidal base (zero-init learned residual on top)
+    so that the model knows whether it is in step 1 (just started thinking)
+    vs step K (close to halting). Mixed additively into the hidden state at
+    the start of each recurrent step.
+    """
+
+    def __init__(self, hidden_size: int, max_steps: int):
+        super().__init__()
+        pe = torch.zeros(max_steps, hidden_size)
+        pos = torch.arange(0, max_steps).float().unsqueeze(1)
+        div = torch.exp(torch.arange(0, hidden_size, 2).float() * -(math.log(10000.0) / hidden_size))
+        pe[:, 0::2] = torch.sin(pos * div)
+        pe[:, 1::2] = torch.cos(pos * div)
+        # Persistent so HF's meta loader doesn't blank it.
+        self.register_buffer("sinusoidal", pe, persistent=True)
+        self.learned = nn.Parameter(torch.zeros(max_steps, hidden_size))
+
+    def forward(self, step_idx: int) -> torch.Tensor:
+        return self.sinusoidal[step_idx] + self.learned[step_idx]
+
+
+class CrossStepMemory(nn.Module):
+    """Lightweight cross-attention from current thinking step to prior steps.
+
+    Lets a token's hidden state at step N look up information it produced
+    at steps N-1, N-2, ... within a bounded window. This is what turns the
+    recurrent loop from "RNN-style scalar accumulation" into a real
+    latent chain-of-thought: each step can reference (and rewrite) the
+    intermediate conclusions of previous steps.
+
+    Implemented as a single-head dot-product attention over the per-token
+    history of hidden states, gated by a sigmoid so it can be ignored when
+    not useful (and so initialization is near-identity).
+    """
+
+    def __init__(self, hidden_size: int):
+        super().__init__()
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.gate = nn.Linear(hidden_size, hidden_size, bias=True)
+        # Zero-init output and bias-shift the gate strongly negative so the
+        # module is the identity at init time; weight grows in only if it
+        # actually helps the loss go down.
+        nn.init.zeros_(self.o_proj.weight)
+        nn.init.zeros_(self.gate.weight)
+        nn.init.constant_(self.gate.bias, -4.0)
+        self.scale = hidden_size ** -0.5
+
+    def forward(self, h: torch.Tensor, history: torch.Tensor) -> torch.Tensor:
+        # h:       (B, T, D)             — current step's hidden state
+        # history: (B, T, S, D)          — last S steps' hidden states
+        B, T, S, D = history.shape
+        q = self.q_proj(h).unsqueeze(2)                          # (B, T, 1, D)
+        k = self.k_proj(history)                                 # (B, T, S, D)
+        v = self.v_proj(history)
+        attn = (q * k).sum(dim=-1, keepdim=True) * self.scale    # (B, T, S, 1)
+        weights = F.softmax(attn, dim=2)
+        read = (weights * v).sum(dim=2)                          # (B, T, D)
+        gated = torch.sigmoid(self.gate(h)) * self.o_proj(read)
+        return h + gated
+
+
 class SwiGLU(nn.Module):
     def __init__(self, cfg: ZeonConfig):
         super().__init__()
@@ -365,7 +432,17 @@ class RecurrentCore(nn.Module):
 
 
 class ZeonBlock(nn.Module):
-    """Wraps `RecurrentCore` with adaptive halting and a max-step budget."""
+    """Wraps `RecurrentCore` with adaptive halting and a max-step budget.
+
+    Per thinking step:
+      1. Add a step embedding so the core knows which iteration it's on.
+      2. Run the core (attention + FFN + halt head).
+      3. If `cross_step_memory` is on, let the new hidden state read from
+         a sliding window of the W most recent hidden states. This is the
+         only place where recurrence becomes more than scalar refinement —
+         the model can re-use intermediate latent results from earlier
+         steps, which is what makes deep latent chain-of-thought possible.
+    """
 
     def __init__(self, cfg: ZeonConfig):
         super().__init__()
@@ -375,6 +452,14 @@ class ZeonBlock(nn.Module):
             self.cores = nn.ModuleList([shared] * cfg.num_recurrent_layers)
         else:
             self.cores = nn.ModuleList([RecurrentCore(cfg) for _ in range(cfg.num_recurrent_layers)])
+        if cfg.use_step_embedding:
+            self.step_embed = StepEmbedding(cfg.hidden_size, cfg.max_recurrent_steps)
+        else:
+            self.step_embed = None
+        if cfg.cross_step_memory:
+            self.cross_step = CrossStepMemory(cfg.hidden_size)
+        else:
+            self.cross_step = None
         self.gradient_checkpointing = False
 
     def forward(
@@ -386,9 +471,13 @@ class ZeonBlock(nn.Module):
         cfg = self.cfg
         kv_caches: list[Optional[LayerKV]] = [None] * len(self.cores)
         hiddens, lambdas = [], []
+        history: list[torch.Tensor] = []  # rolling window of recent hidden states
 
         for step in range(cfg.max_recurrent_steps):
             current = h
+            if self.step_embed is not None:
+                current = current + self.step_embed(step)
+
             for li, core in enumerate(self.cores):
                 if self.gradient_checkpointing and self.training:
                     current, lam, kv = torch.utils.checkpoint.checkpoint(
@@ -398,13 +487,22 @@ class ZeonBlock(nn.Module):
                 else:
                     current, lam, kv = core(current, position_ids, attention_mask, kv_caches[li])
                 kv_caches[li] = kv
+
+            if self.cross_step is not None and len(history) > 0:
+                # Stack the last W steps into a (B, T, S, D) tensor.
+                window = history[-cfg.cross_step_memory_window:]
+                hist = torch.stack(window, dim=2)
+                current = self.cross_step(current, hist)
+
             h = current
+            history.append(h)
+            # Trim eagerly to bound activation memory under long K.
+            if cfg.cross_step_memory and len(history) > cfg.cross_step_memory_window:
+                history = history[-cfg.cross_step_memory_window:]
+
             hiddens.append(h)
             lambdas.append(lam)
 
-            # Inference-time early exit: once every token has spent its
-            # halt mass we can stop the loop. Training always runs the full
-            # budget so the halt distribution stays well-defined.
             if not self.training and step + 1 >= cfg.min_recurrent_steps:
                 with torch.no_grad():
                     lam_stack = torch.stack(lambdas, dim=-1)
@@ -415,7 +513,6 @@ class ZeonBlock(nn.Module):
         h_out, p, _ = ponder_combine(hiddens, lambdas)
         ponder_loss = ponder_kl_loss(p, cfg.ponder_lambda_p)
         entropy = halt_entropy_bonus(p)
-        # Subtract entropy bonus directly so callers only see one scalar.
         ponder_loss = ponder_loss - cfg.halt_entropy_weight * entropy
         return h_out, ponder_loss
 
