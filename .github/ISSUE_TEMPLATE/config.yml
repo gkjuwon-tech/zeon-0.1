@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read CONTRIBUTING.md first
+    url: https://github.com/gkjuwon-tech/zeon-0.1/blob/main/CONTRIBUTING.md
+    about: PR process, the three-question rubric, and dev setup live there.
+  - name: Read the roadmap
+    url: https://github.com/gkjuwon-tech/zeon-0.1/blob/main/docs/ROADMAP.md
+    about: Before proposing big changes, know where we think we're heading.
