@@ -4,8 +4,6 @@ plain recurrent transformer: step embeddings and cross-step latent memory.
 
 from __future__ import annotations
 
-import copy
-
 import torch
 
 from zeon import ZeonConfig, ZeonForCausalLM

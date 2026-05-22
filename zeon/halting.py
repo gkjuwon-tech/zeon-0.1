@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class HaltingHead(nn.Module):
@@ -61,7 +60,6 @@ def ponder_combine(
         p_remaining:   (B, T)    residual not-yet-halted mass.
     """
     assert len(hidden_states) == len(lambdas) and len(lambdas) >= 1
-    N = len(lambdas)
     lam = torch.stack(lambdas, dim=-1)            # (B, T, N)
     one_minus = torch.clamp(1.0 - lam, min=1e-6)
     log_one_minus = torch.log(one_minus)

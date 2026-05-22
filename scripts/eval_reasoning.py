@@ -44,20 +44,18 @@ def main():
 
     correct = 0
     for q, gold in PROBES:
-        ids = tok(q, return_tensors="pt").input_ids.to(args.device)
-        # `generate` won't work yet without a KV-cache-aware forward; we
-        # do dumb greedy decoding off the last-position logits here.
-        out_text = q
-        cur = ids
-        for _ in range(args.max_new):
-            with torch.no_grad():
-                logits = model(cur).logits[:, -1, :]
-            nxt = logits.argmax(dim=-1, keepdim=True)
-            cur = torch.cat([cur, nxt], dim=1)
-            if nxt.item() == tok.eos_token_id:
-                break
-            out_text = tok.decode(cur[0], skip_special_tokens=True)
-        pred = extract_answer(out_text[len(q):])
+        enc = tok(q, return_tensors="pt").to(args.device)
+        with torch.no_grad():
+            out_ids = model.generate(
+                input_ids=enc.input_ids,
+                attention_mask=enc.attention_mask,
+                max_new_tokens=args.max_new,
+                do_sample=False,
+                use_cache=True,
+                pad_token_id=tok.pad_token_id or tok.eos_token_id,
+            )
+        gen_text = tok.decode(out_ids[0, enc.input_ids.size(1):], skip_special_tokens=True)
+        pred = extract_answer(gen_text)
         ok = str(gold).lower() in pred.lower()
         correct += int(ok)
         print(("OK " if ok else "X  "), q, "->", pred, "(gold:", gold, ")")

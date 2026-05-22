@@ -536,7 +536,6 @@ def _build_decoder_mask(
     """
     if attention_mask is None or not (attention_mask == 0).any():
         return None
-    B = attention_mask.size(0)
     pad = attention_mask[:, None, None, :].to(dtype=dtype)  # (B, 1, 1, T_kv)
     pad = (1.0 - pad) * torch.finfo(dtype).min
     causal = torch.zeros((T_q, T_kv), dtype=dtype, device=device)
