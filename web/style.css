@@ -1,0 +1,251 @@
+/* zeon landing page — HN bar on top, terminal body below.
+   intentionally rough; no framework, no fancy fonts loading.
+   if you think this looks like 1998, that's the point. */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0f0f0e;
+  color: #d0d0c0;
+  font-family: "SF Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+a {
+  color: #ff8a3d;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+a:hover { background: #ff8a3d22; }
+
+/* ---------- HN-style top bar ---------- */
+.hn {
+  background: #ff6600;
+  color: #000;
+  padding: 6px 14px;
+  border-bottom: 2px solid #000;
+  font-weight: bold;
+}
+.hn a { color: #000; text-decoration: none; }
+.hn a:hover { text-decoration: underline; background: transparent; }
+.hn-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.hn-logo {
+  background: #000;
+  color: #ff6600;
+  padding: 2px 5px;
+  border: 1px solid #000;
+  font-weight: bold;
+}
+.hn-title { font-size: 16px; letter-spacing: 1px; }
+.hn-nav { display: flex; gap: 12px; flex-wrap: wrap; margin-left: 6px; }
+.hn-nav a { font-weight: normal; font-size: 13px; }
+.hn-cta { font-weight: bold !important; }
+.hn-sub {
+  padding: 4px 14px;
+  background: #ffe6cc;
+  color: #4a3000;
+  font-size: 12px;
+  border-bottom: 1px solid #000;
+}
+.hn-sub .dim { color: #806040; }
+
+/* ---------- body ---------- */
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 22px 64px;
+}
+
+section { margin: 44px 0; }
+
+h2 {
+  color: #b6e88f;
+  font-weight: normal;
+  font-size: 18px;
+  margin: 0 0 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed #2e2e2a;
+}
+h3 {
+  color: #ffb87a;
+  font-weight: normal;
+  font-size: 15px;
+  margin: 22px 0 6px;
+}
+
+p { margin: 10px 0; }
+em { color: #f8e8a0; font-style: italic; }
+strong { color: #f0f0e0; }
+
+ul, ol { padding-left: 22px; }
+ul li, ol li { margin: 4px 0; }
+
+code {
+  background: #1a1a18;
+  border: 1px solid #2b2b27;
+  padding: 0 4px;
+  border-radius: 2px;
+  color: #d0e8a0;
+}
+
+hr.rule {
+  border: 0;
+  border-top: 1px dashed #2e2e2a;
+  margin: 32px 0;
+}
+
+/* ---------- hero ---------- */
+#hero { padding-top: 12px; }
+
+.ascii {
+  margin: 0;
+  color: #ff6600;
+  font-size: 13px;
+  line-height: 1.15;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.tagline {
+  font-size: 16px;
+  color: #f0f0d8;
+  margin: 18px 0;
+}
+
+.cta-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+
+.btn {
+  display: inline-block;
+  border: 1px solid #555;
+  padding: 6px 12px;
+  color: #d0d0c0 !important;
+  text-decoration: none !important;
+  background: #1a1a18;
+  font-size: 13px;
+}
+.btn:hover { background: #2b2b27; }
+.btn.primary {
+  background: #ff6600;
+  color: #000 !important;
+  border-color: #000;
+  font-weight: bold;
+}
+.btn.primary:hover { background: #ff7e2d; }
+
+/* ---------- terminal blocks ---------- */
+.terminal, .code {
+  background: #0a0a09;
+  border: 1px solid #2b2b27;
+  padding: 14px 16px;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #c8e6a0;
+  margin: 14px 0;
+}
+.terminal {
+  border-left: 3px solid #b6e88f;
+}
+.code {
+  border-left: 3px solid #ff8a3d;
+  color: #d8d8c0;
+}
+.prompt { color: #ff6600; }
+.cmd { color: #f8f8e8; }
+.ok { color: #7fcf6f; }
+.dim { color: #6b6b62; }
+
+/* ---------- roadmap table ---------- */
+.phase-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.phase-table th, .phase-table td {
+  border: 1px solid #2e2e2a;
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.phase-table th {
+  background: #1a1a18;
+  color: #ffb87a;
+  font-weight: normal;
+}
+.phase-table tr.done td { color: #7fcf6f; }
+.phase-table tr.now td { background: #2a1f0a; color: #ffd17a; }
+
+/* ---------- cards (contribute) ---------- */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+.card {
+  border: 1px solid #2e2e2a;
+  background: #131311;
+  padding: 14px 16px;
+}
+.card h3 { margin-top: 0; }
+
+/* ---------- faq ---------- */
+details {
+  border: 1px solid #2e2e2a;
+  background: #131311;
+  margin: 8px 0;
+  padding: 8px 12px;
+}
+details > summary {
+  cursor: pointer;
+  color: #ffb87a;
+  list-style: '> ';
+}
+details[open] > summary {
+  list-style: 'v ';
+  margin-bottom: 6px;
+  border-bottom: 1px dashed #2e2e2a;
+  padding-bottom: 4px;
+}
+
+/* ---------- footer ---------- */
+footer {
+  margin-top: 64px;
+  padding-top: 22px;
+  border-top: 1px dashed #2e2e2a;
+  text-align: center;
+}
+footer .ascii {
+  display: inline-block;
+  text-align: left;
+  color: #6b6b62;
+}
+.footer-meta {
+  margin: 8px 0;
+  font-size: 12px;
+  color: #888;
+}
+
+/* small screens */
+@media (max-width: 640px) {
+  .hn-bar { gap: 8px; }
+  .hn-nav { gap: 8px; }
+  .ascii { font-size: 10px; }
+  h2 { font-size: 16px; }
+  .tagline { font-size: 14px; }
+}

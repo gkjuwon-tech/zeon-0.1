@@ -7,6 +7,7 @@ from zeon.modeling_zeon import (
     ZeonForCausalLM,
     ZeonModel,
 )
+from zeon.workspace import WorkspaceBank
 
 # Register with HF Auto classes so that:
 #   AutoConfig.from_pretrained("path/to/zeon")
@@ -22,6 +23,7 @@ __all__ = [
     "ZeonBlock",
     "ZeonModel",
     "ZeonForCausalLM",
+    "WorkspaceBank",
 ]
 
 __version__ = "0.1.0"

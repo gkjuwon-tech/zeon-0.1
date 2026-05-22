@@ -1,134 +1,160 @@
 # ZEON — Project Memory
 
-> **Claude. 매 세션 시작할 때 이 문서부터 읽는다. 한 번도 빼먹지 않는다.**
-> 다 읽고 본 작업 시작.
+> **Agent: read this file first, every session, before any other work.**
+> Yes, even if you've read it before. Habits drift; memory doesn't.
+
+This is the in-repo memory document for AI coding agents (Claude
+Code, Devin, Cursor, Aider, whatever). It's the agent-facing twin of
+`README.md`. If you're a human, this is *also* useful — it's the
+checklist we use on ourselves before opening a PR.
+
+There is an identical-content `AGENTS.md` for tools that look for
+that filename. Both files redirect to the same rules.
 
 ---
 
-## 0. 한 줄 정체성
+## 0. One-line identity
 
-**ZEON 은 트랜스포머에 양념 치는 프로젝트가 아니다.**
-**ZEON 은 트랜스포머를 *지식 저장소로 사용하는* 잠재 공간 가상 머신 (Latent VM) 을 만드는 프로젝트다.**
+**ZEON is not a project that adds seasoning to a transformer.**
+**ZEON is a project that builds a Latent Virtual Machine which *uses*
+the transformer as its dictionary.**
 
-이거 헷갈리면 다음 작업 진입 금지. 다시 읽고 와라.
-
----
-
-## 1. 절대 어기지 않는 정신 강령 (5조)
-
-매 작업 시작 전 머릿속에 다시 적자.
-
-1. **트랜스포머 양념 = 혁신 아님.**
-   "여기에 attention 한 번 더 / gate 하나 더 / embedding 하나 더" 가
-   해법으로 떠오르면 **그 작업 다시 설계.** Universal Transformer / PonderNet /
-   Recurrent Depth Transformer 의 짬뽕은 이미 존재한다. 그 경계 안에 머무르면 패배.
-
-2. **수치만 만지면 박살.**
-   `hidden_size`, `num_layers`, `K_max`, `learning_rate`, `weight` 조정으로
-   문제를 풀려는 충동은 **양념 모드 부활**. 구조를 바꿔야 진전.
-
-3. **Ablation 가능하지 않으면 의미 없음.**
-   각 컴포넌트는 끄고 켜는 flag 가 있어야 한다.
-   끄면 점수가 무너져야 한다. 안 무너지면? **안 만든 거다.**
-
-4. **벤치마크 없는 phase = 추측.**
-   매 phase 끝엔 **최소 1개**의 reasoning benchmark 점수가 따라온다.
-   숫자 없으면 의견. 숫자 있으면 사실. 의견 가지고 phase 종료 선언 금지.
-
-5. **실패는 학습이라고 부른다.**
-   Phase 3 가 안 되면 Phase 3' 만들거나, 폐기하고 Phase 4 로 간다.
-   1년이라는 시간을 *자존심에* 쓰지 않는다. ROADMAP 의 "만약 실패하면" 섹션
-   을 매 phase 끝에 다시 읽는다.
+If you find yourself confused about which one we're doing, *stop and
+re-read this sentence*. Then go.
 
 ---
 
-## 2. 매 작업 진입 전 셀프 체크 (3문항)
+## 1. The five standing orders (read before every commit)
 
-코드 한 줄 짜기 전에 자문:
+1. **Seasoning a transformer is not innovation.**
+   The instant your proposed fix is "add another attention head" /
+   "another gate" / "another small embedding head", *redesign the
+   work*. Universal Transformer + PonderNet + Recurrent-Depth
+   Transformer already exists; sitting inside that triangle is a
+   defeat.
 
-1. **"이거 그냥 트랜스포머에 뭐 하나 더 붙인 거 아닌가?"**
-   → 답이 yes 면 **지금 작업 다시 설계.** 코드 쓰지 마.
+2. **You cannot dial yourself out of a wrong design.**
+   Adjusting `hidden_size`, `num_layers`, `K_max`, `learning_rate`, or
+   weights is *not progress*. It's seasoning mode trying to come back
+   in. Change the *structure*.
 
-2. **"이거 끄면 점수가 떨어지나?"**
-   → 답이 모르겠으면 **ablation flag 부터 박고 시작.**
+3. **Ablation-impossible = not built.**
+   Every component needs a toggle flag. Flag off ⇒ score must drop.
+   If it doesn't drop, the component is decorative — delete it.
 
-3. **"이거 측정할 수 있나? 어떤 벤치마크의 어떤 metric 에서?"**
-   → 답이 없으면 **벤치마크부터 정하고 시작.**
+4. **No benchmark = guess.**
+   Every phase ends with at least one reasoning benchmark number.
+   Opinion-based "phase complete" declarations are forbidden.
 
-위 3문항 통과 못 한 작업은 시작 금지. 통과해야 코드 들어감.
-
----
-
-## 3. 현재 위치 / 다음 위치
-
-**현재**: Phase 0 (양념) 완료. baseline 코드 + 17 테스트 + CI.
-
-**다음**: Phase 1 (Workspace Bank)
-- 구조화된 작업 메모리 (16 슬롯) 박기
-- Read/Write head 박기
-- diversity loss, slot collapse 방지
-- GSM8K small subset 에서 Phase 0 대비 +2~5% 검증
-
-전체 7-phase 계획은 [`docs/ROADMAP.md`](docs/ROADMAP.md).
-목표 시스템 설계도는 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-매 phase 끝나면:
-- [ ] 새 컴포넌트 끄는 flag 작동 확인
-- [ ] flag 끄면 점수 떨어지나 확인
-- [ ] 작은 reasoning bench 점수 기록 (`docs/PHASE_NOTES/phase{N}_*.md`)
-- [ ] 실패 케이스 5개 이상 수동 분석
-- [ ] PR + 회고 노트 + 다음 phase 결정
+5. **Failure is a measurement, not an embarrassment.**
+   When Phase 3 falls over, build Phase 3' or skip to Phase 4. Don't
+   spend a year defending your self-image. The `if it falls over`
+   blocks in `docs/ROADMAP.md` exist for a reason — re-read them when
+   stuck.
 
 ---
 
-## 4. 기술적 비협상 사항
+## 2. The three-question self-check (run before any code)
 
-매 변경에 대해 반드시 유지:
+1. **"Is this just one more thing bolted onto a transformer?"**
+   → Yes → *redesign the work first*. Don't write code yet.
 
-- **HF 호환성**: `AutoModelForCausalLM.from_pretrained()` 로 항상 로드 가능.
-  깨지면 phase 실패로 간주.
-- **테스트 그린**: `pytest tests/ -q` 항상 green. ruff 항상 clean.
-  깨진 채로 commit 금지.
-- **트랜스플랜트 가능**: 새 컴포넌트 추가 시 `zeon/transplant.py` 도 같이 업데이트.
-  base 모델에서 옮길 수 없는 형태면 설계 다시.
-- **추론 비용 ≤ base 모델 × 5배**. 넘으면 의미 없음 (그냥 큰 모델 쓰는 게 나음).
-- **컨텍스트 길이 16k 가정**. 200만 컨텍스트 추구하지 않는다. 우리 가설은
-  "짧은 컨텍스트 + 깊은 잠재 사고".
+2. **"If I turn this off, does the score drop?"**
+   → Don't know → *put in the ablation flag before anything else*.
 
----
+3. **"Can I measure this? Which benchmark, which metric?"**
+   → No answer → *pick the benchmark before writing the module*.
 
-## 5. 문서 작성 의무
-
-- 매 phase 종료 시 `docs/PHASE_NOTES/phase{N}_*.md` 회고 노트 작성.
-  포함: 만든 거, 측정 점수, 실패 케이스 5개, 다음 phase 결정.
-- 머리속에 있는 통찰은 한 달 뒤 잊는다. **반드시 글로.**
-- 회고 노트 없이 다음 phase 진입 금지.
+Code that fails any of the three above does not get committed.
 
 ---
 
-## 6. 톤 & 작업 스타일 (형이 좋아하는 거)
+## 3. Where we are / where we're going
 
-- 한국말 텐션 살려서 보고. 짧고 직설적.
-- 이상한 모호한 추상화 ("최적화", "개선") 금지. 정량으로 말한다.
-- 진행 상황은 짧게 자주. 완료 후 한 번에 X.
-- 실패 / 막힘 / 의심 즉시 보고. 묻혀가지 마.
+**Now**: Phase 1 (workbench) is *in code*. With this PR, `WorkspaceBank`
+exists, all flags work, 26 tests green. **Phase 1 is not yet
+*validated*** — the benchmark sub-tasks (GSM8K small-subset
++2–5% over Phase 0) still need to run on real hardware. That's not
+"phase done"; that's "phase ready to evaluate".
+
+**Next**: validate Phase 1 → write the retrospective into
+`docs/PHASE_NOTES/phase1_workspace.md` → only then enter Phase 2
+(operators).
+
+Full plan: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Target system: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Per-phase retros: [`docs/PHASE_NOTES/`](docs/PHASE_NOTES/).
+
+End-of-phase ritual (no shortcuts):
+- [ ] Component's enable flag works
+- [ ] Flag-off measurably hurts score (otherwise: didn't build it)
+- [ ] One reasoning benchmark number recorded
+- [ ] ≥ 5 failure cases analyzed by hand
+- [ ] PR + retrospective + next-phase decision
 
 ---
 
-## 7. 문서/링크
+## 4. Technical non-negotiables
 
-- README: 프로젝트 외부 face. 짧고 강하게.
-- `docs/ROADMAP.md`: 1년 phase 계획. 막히면 거기 "만약 실패하면" 다시 읽기.
-- `docs/ARCHITECTURE.md`: 1년 후 목표 설계도. 매 phase 마칠 때 갱신.
-- `docs/PHASE_NOTES/`: phase별 회고. 다음 phase 들어가기 전 반드시 작성.
+For every change, all of these must remain true:
+
+- **HF compat**: `AutoModelForCausalLM.from_pretrained()` must work.
+  If it breaks, the phase fails.
+- **Tests green**: `pytest tests/ -q` always green; `ruff` always
+  clean. No "I'll fix the test later" commits.
+- **Transplantable**: when adding a new component, update
+  `zeon/transplant.py` accordingly. If it cannot be migrated from a
+  base model, redesign it.
+- **Inference cost ≤ 5× base.** If we cross that, the whole LVM thesis
+  stops paying for itself and we should just use a bigger model.
+- **Context length assumption: 16k.** We are not chasing 2M context.
+  The bet is "short context + deep latent thinking".
 
 ---
 
-## 8. 마지막 한 줄
+## 5. Documentation obligations
 
-> **양념 한 스푼 더 치는 사람이 되지 말자.**
-> **잠재 공간에 가상 머신 짓는 사람이 되자.**
+- At the end of every phase, write a retrospective at
+  `docs/PHASE_NOTES/phase{N}_*.md`. Contents: what we built,
+  measured numbers, ≥ 5 failure cases, next-phase decision.
+- Insight kept only in heads dies within a month. **Write it down.**
+- No retro = no entry to the next phase.
 
-코드 짜기 전에 이 문장 한 번 더 읽자.
+---
 
-가자.
+## 6. Reporting style (human preference)
+
+When messaging the human collaborator at runtime:
+
+- Korean is fine; *keep the tension*. Short, direct.
+- No vague abstractions ("optimization", "improvement"). Speak in
+  numbers.
+- Frequent short progress updates. No "let me batch up the report".
+- Failures / blockers / suspicions: surface *immediately*. Don't bury.
+
+(This applies to chat messages. Code, docs, and PRs are in English.)
+
+---
+
+## 7. Documents map
+
+- `README.md` — public face of the project. Short, sharp.
+- `docs/ROADMAP.md` — 12-month plan. When stuck, re-read the "if it
+  falls over" section of the current phase.
+- `docs/ARCHITECTURE.md` — target architecture at year end. Update
+  every time a phase closes.
+- `docs/PHASE_NOTES/` — per-phase retrospectives. **Mandatory** before
+  entering the next phase.
+- `CONTRIBUTING.md` — branch / PR / review process for human contributors.
+- `CODE_OF_CONDUCT.md` — community rules.
+
+---
+
+## 8. The last line
+
+> **Don't be the person adding one more spoon of seasoning.**
+> **Be the person building a virtual machine in latent space.**
+
+Re-read that sentence once before writing code today.
+
+Go.
