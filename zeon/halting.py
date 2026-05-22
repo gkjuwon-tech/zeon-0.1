@@ -23,17 +23,26 @@ import torch.nn.functional as F
 
 
 class HaltingHead(nn.Module):
-    """Predict per-token halt probability lambda_n in [0, 1]."""
+    """Predict per-token halt probability lambda_n in (eps, 1-eps).
 
-    def __init__(self, hidden_size: int):
+    Kept in fp32 internally so that BF16 training doesn't crush the
+    sigmoid into all-0/all-1 (which would freeze the halt distribution
+    and zero out ponder gradients).
+    """
+
+    def __init__(self, hidden_size: int, eps: float = 1e-3):
         super().__init__()
         self.proj = nn.Linear(hidden_size, 1, bias=True)
         nn.init.zeros_(self.proj.bias)
         nn.init.normal_(self.proj.weight, std=1e-3)
+        self.eps = eps
+        # Force the projection to stay fp32; it's tiny (D -> 1).
+        self.proj.to(torch.float32)
 
     def forward(self, h: torch.Tensor) -> torch.Tensor:
-        # h: (B, T, D) -> lambda: (B, T)
-        return torch.sigmoid(self.proj(h).squeeze(-1))
+        logits = self.proj(h.float()).squeeze(-1)
+        lam = torch.sigmoid(logits)
+        return lam.clamp(self.eps, 1.0 - self.eps)
 
 
 def ponder_combine(
@@ -91,3 +100,15 @@ def ponder_kl_loss(p: torch.Tensor, lambda_p: float) -> torch.Tensor:
     log_p = torch.log(p.clamp_min(1e-8))
     kl = (p * (log_p - log_prior)).sum(dim=-1)     # (B, T)
     return kl.mean()
+
+
+def halt_entropy_bonus(p: torch.Tensor) -> torch.Tensor:
+    """Mean entropy of the per-token halt distribution.
+
+    Used as a *bonus* (subtracted from the total loss with a small
+    weight) to prevent the halt distribution from collapsing onto a
+    single step early in training, which would zero out gradient flow
+    through every other recurrent step.
+    """
+    log_p = torch.log(p.clamp_min(1e-8))
+    return -(p * log_p).sum(dim=-1).mean()

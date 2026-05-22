@@ -27,6 +27,7 @@ class ZeonConfig(PretrainedConfig):
         halt_threshold: float = 0.9,
         ponder_loss_weight: float = 1e-2,
         ponder_lambda_p: float = 0.2,
+        halt_entropy_weight: float = 1e-3,
         share_recurrent_weights: bool = True,
         recurrent_state_mix: str = "residual",  # residual | gated | film
         freeze_ffn: bool = True,
@@ -59,6 +60,7 @@ class ZeonConfig(PretrainedConfig):
         self.halt_threshold = halt_threshold
         self.ponder_loss_weight = ponder_loss_weight
         self.ponder_lambda_p = ponder_lambda_p
+        self.halt_entropy_weight = halt_entropy_weight
         self.share_recurrent_weights = share_recurrent_weights
         self.recurrent_state_mix = recurrent_state_mix
         self.freeze_ffn = freeze_ffn
