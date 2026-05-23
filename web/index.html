@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>zeon — latent virtual machine on top of a transformer</title>
+<meta name="description" content="ZEON is not a bigger transformer. ZEON is a small virtual machine that thinks inside latent space, using a transformer as its dictionary.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-family='monospace' font-size='14'%3E%3E_%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="hn">
+  <div class="hn-bar">
+    <span class="hn-logo">[Z]</span>
+    <span class="hn-title">ZEON</span>
+    <nav class="hn-nav">
+      <a href="#what">what</a>
+      <a href="#why">why</a>
+      <a href="#how">how</a>
+      <a href="#roadmap">roadmap</a>
+      <a href="#status">status</a>
+      <a href="#contribute">contribute</a>
+      <a href="#faq">faq</a>
+      <a class="hn-cta" href="https://github.com/gkjuwon-tech/zeon-0.1">github</a>
+    </nav>
+  </div>
+  <div class="hn-sub">
+    <span class="dim">// thread:</span>
+    we are not growing the model. we are changing the way it thinks.
+    <span class="dim">[score: ?]</span>
+  </div>
+</header>
+
+<main>
+
+<section id="hero">
+  <pre class="ascii">
+   _____  ______  ____  _   _
+  |__  / |  ____|/ __ \| \ | |
+    / /  | |__  | |  | |  \| |
+   / /_  |  __| | |  | | . ` |
+  /____| |____|  \____/|_|\_|     v0.1 — phase 1 / 7
+  </pre>
+
+  <p class="tagline">
+    a learned virtual machine that runs inside latent space.<br>
+    it uses a transformer as its dictionary. it is <em>not</em>
+    another transformer.
+  </p>
+
+  <pre class="terminal">
+<span class="prompt">$</span> <span class="cmd">python -c "from zeon import ZeonForCausalLM, ZeonConfig"</span>
+<span class="prompt">$</span> <span class="cmd">pytest tests/ -q</span>
+<span class="ok">..........................</span>
+26 passed in 12.3s
+<span class="prompt">$</span> <span class="cmd">cat docs/ROADMAP.md | head -1</span>
+<span class="dim"># ZEON — 12-month chart</span>
+<span class="prompt">$</span> <span class="cmd">_</span>
+  </pre>
+
+  <div class="cta-row">
+    <a class="btn primary" href="https://github.com/gkjuwon-tech/zeon-0.1">read the code →</a>
+    <a class="btn" href="https://github.com/gkjuwon-tech/zeon-0.1/blob/main/docs/ROADMAP.md">read the roadmap</a>
+    <a class="btn" href="https://github.com/gkjuwon-tech/zeon-0.1/blob/main/CONTRIBUTING.md">contribute</a>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section id="what">
+  <h2>// what this is</h2>
+
+  <p>
+    Most "reasoning" work right now scales one of three knobs:
+    bigger model, longer chain-of-thought, more samples-and-vote.
+    ZEON is a bet on a fourth axis: <em>structure the latent
+    computation itself.</em>
+  </p>
+
+  <p>
+    Concretely: take a pretrained transformer, freeze its embedding
+    and last few decoder layers and LM head, and graft a small
+    <strong>virtual machine</strong> on top. That VM has a workspace
+    of slots, a library of operators, a verifier that scores
+    intermediate states, and a halting policy trained with RL. It
+    thinks for K adaptive steps in latent space, then emits a token.
+  </p>
+
+  <p>
+    Today (v0.1, this PR) we are at <strong>phase 1 of 7</strong> —
+    the workspace bank exists, every flag works, 26 unit tests are
+    green. Benchmark validation is the very next thing.
+  </p>
+</section>
+
+<hr class="rule">
+
+<section id="why">
+  <h2>// why this should work (and where it might not)</h2>
+
+  <h3>the bet</h3>
+  <p>
+    A single hidden vector recurrently updated for K steps is just
+    an RNN with adaptive depth. That's Universal Transformer
+    (Dehghani '18) + PonderNet (Banino '21) and it's well-explored
+    territory. It is also <em>not enough</em> — the "scratchpad" is
+    one vector, and there is no way to keep separate hypotheses,
+    intermediate evidence, and a running conclusion at the same time.
+  </p>
+  <p>
+    Humans don't think with one number. We keep <em>multiple</em>
+    things in mind at once, and they update at different rates. So
+    ZEON adds a <strong>structured workspace</strong>: 16 learned
+    slots per token, sticky per-slot gating, multi-head intra-token
+    attention for reads, a diversity loss to prevent collapse. The
+    slots' roles are <em>not labelled by humans</em>; they specialise
+    via gradient.
+  </p>
+
+  <h3>the risk</h3>
+  <p>
+    The honest list of ways this can fail:
+  </p>
+  <ul>
+    <li><strong>slot collapse</strong> — every slot learns the same vector, we burned compute on nothing. Mitigation: diversity loss + per-slot role embeddings.</li>
+    <li><strong>dead branch</strong> — workspace contributes a residual that's gated to zero, no gradient flows. Mitigation: we explicitly avoid zero-init on the output projection and verified gradient flow in unit tests.</li>
+    <li><strong>cost</strong> — workspace state is (B, T, S, D), one workspace per token. With S=16 this is 16× the activation memory of the equivalent recurrent core. For our 16k-context bet that's manageable, but if S grows we revisit.</li>
+    <li><strong>operator routing collapse</strong> (phase 2) — router always picks the same operator. Mitigation: load-balance loss, Gumbel-softmax warm-up, top-k routing.</li>
+    <li><strong>verifier outsmarts body</strong> (phase 3) — process reward model becomes the whole brain. Mitigation: cap verifier size at body/4 and label-smooth.</li>
+    <li><strong>RL variance explodes</strong> (phase 4) — halting policy gradient ping-pongs. Mitigation: warm-start from supervised halt, REINFORCE → PPO transition, KL prior baseline.</li>
+  </ul>
+
+  <p>
+    For each of these the
+    <a href="https://github.com/gkjuwon-tech/zeon-0.1/blob/main/docs/ROADMAP.md">ROADMAP</a>
+    has an explicit "if it falls over" exit. If a phase doesn't work,
+    we either build phase N' or skip ahead. We do not spend a year
+    defending our self-image.
+  </p>
+</section>
+
+<hr class="rule">
+
+<section id="how">
+  <h2>// how it works</h2>
+
+  <p>
+    Forward pass, in compact form:
+  </p>
+
+  <pre class="code">
+h_0 = OuterStack(Embed(x))           # transplanted, frozen
+W_0 = InitWorkspace(h_0)             # per-token slots, role-embedded
+
+for t in 1..K:
+    op   = Router(W_{t-1}, h_0)              # phase 2: pick operator
+    read = ReadHeads(W_{t-1}, h)             # multi-head intra-token attn
+    W_t  = WriteHeads(op(W_{t-1}, read))     # gated sticky update
+    score_t = Verifier(W_t, x)               # phase 3: process reward
+    if HaltCritic(W_t) &gt; halt_threshold:    # phase 4: RL-trained halt
+        break
+
+h_K = Project(W_K)
+y   = LMHead(h_K)                    # transplanted, frozen
+  </pre>
+
+  <p>
+    The outer stack is taken from a base model (Qwen2.5-1.5B in
+    our smoke tests) and frozen — we do not retrain knowledge. The
+    LVM loop is what we train. By Phase 5 it ships with K parallel
+    rollouts and an Energy Head picking the most-trustworthy one.
+  </p>
+
+  <h3>the 5 invariants we will not bend</h3>
+  <ol>
+    <li><strong>HF compat</strong> — must load via <code>AutoModelForCausalLM.from_pretrained</code>. If this breaks, the phase fails.</li>
+    <li><strong>ablation flag per component</strong> — flag off must measurably hurt the score. If it doesn't, the component is decorative and we delete it.</li>
+    <li><strong>benchmark per phase</strong> — no opinions-only "phase done" declarations.</li>
+    <li><strong>inference ≤ 5× base</strong> — past that, just use a bigger model.</li>
+    <li><strong>16k context</strong> — we are not chasing 2M context. The bet is "short context + deep latent thinking".</li>
+  </ol>
+</section>
+
+<hr class="rule">
+
+<section id="roadmap">
+  <h2>// roadmap (12 months)</h2>
+
+  <table class="phase-table">
+    <thead>
+    <tr><th>#</th><th>codename</th><th>landed?</th><th>what</th><th>risk</th></tr>
+    </thead>
+    <tbody>
+    <tr class="done">
+      <td>0</td><td>seasoning</td><td>✓ shipped</td>
+      <td>baseline: HF-compat, transplant, PonderNet, cross-step memory</td>
+      <td>🔥</td>
+    </tr>
+    <tr class="now">
+      <td>1</td><td>workbench</td><td>★ this PR</td>
+      <td>workspace bank (16 slots, role embeddings, sticky gate, diversity loss)</td>
+      <td>🔥🔥🔥</td>
+    </tr>
+    <tr>
+      <td>2</td><td>toolbox</td><td>queued</td>
+      <td>operator library, top-k routing, load-balance loss</td>
+      <td>🔥🔥🔥🔥</td>
+    </tr>
+    <tr>
+      <td>3</td><td>inspector</td><td>queued</td>
+      <td>verifier head (process reward, dense per-step gradient)</td>
+      <td>🔥🔥</td>
+    </tr>
+    <tr>
+      <td>4</td><td>time-cop</td><td>queued</td>
+      <td>halt critic, REINFORCE → PPO, KL prior baseline</td>
+      <td>🔥🔥🔥🔥🔥</td>
+    </tr>
+    <tr>
+      <td>5</td><td>parallel minds</td><td>queued</td>
+      <td>K parallel rollouts + energy head selection</td>
+      <td>🔥🔥🔥</td>
+    </tr>
+    <tr>
+      <td>6</td><td>recall</td><td>queued</td>
+      <td>self-distillation in latent space (teacher K=16 → student K=4)</td>
+      <td>🔥🔥</td>
+    </tr>
+    <tr>
+      <td>7</td><td>stage</td><td>queued</td>
+      <td>GSM8K / MATH / BBH / ARC-AGI / HumanEval — public numbers</td>
+      <td>🔥</td>
+    </tr>
+    </tbody>
+  </table>
+
+  <p>
+    Full plan with success criteria and "if it falls over" exits per
+    phase:
+    <a href="https://github.com/gkjuwon-tech/zeon-0.1/blob/main/docs/ROADMAP.md">docs/ROADMAP.md</a>.
+  </p>
+</section>
+
+<hr class="rule">
+
+<section id="status">
+  <h2>// status &mdash; right now</h2>
+
+  <pre class="terminal">
+<span class="prompt">$</span> <span class="cmd">git log --oneline -1</span>
+<span class="dim">phase-1: workspace bank, governance, landing page</span>
+
+<span class="prompt">$</span> <span class="cmd">pytest tests/ -q</span>
+<span class="ok">..........................</span>
+26 passed in 12.3s
+
+<span class="prompt">$</span> <span class="cmd">ruff check zeon scripts tests</span>
+All checks passed!
+
+<span class="prompt">$</span> <span class="cmd">python -c "from transformers import AutoModelForCausalLM; import zeon; print('ok')"</span>
+ok
+
+<span class="prompt">$</span> <span class="cmd">grep -c '^def test_' tests/test_workspace.py</span>
+9
+
+<span class="prompt">$</span> <span class="cmd">cat docs/PHASE_NOTES/phase1_workspace.md | head -3</span>
+<span class="dim"># Phase 1 — Workbench retrospective</span>
+<span class="dim">&gt; Status: shipped to main, not yet validated.</span>
+<span class="dim">&gt; Code lands in this PR. Benchmark validation is the *next* thing.</span>
+  </pre>
+
+  <p>
+    Things we honestly have <em>not</em> done yet:
+  </p>
+  <ul>
+    <li>actual GSM8K validation run (we have the unit tests and gradient flow, not the benchmark number yet)</li>
+    <li>per-slot specialization visualisation (planned with the validation run)</li>
+    <li>5+ manual failure-case writeup (planned in the same retro)</li>
+  </ul>
+
+  <p class="dim">
+    Don't trust "phase done" tweets from anyone, including us, until
+    the retro doc has numbers in it.
+  </p>
+</section>
+
+<hr class="rule">
+
+<section id="contribute">
+  <h2>// contribute</h2>
+
+  <p>
+    We want collaborators. Specifically: collaborators who push back
+    on the design. If you've ever read a paper and thought "this is
+    just X with an extra head", you are the right person.
+  </p>
+
+  <p>
+    Three doors in:
+  </p>
+
+  <div class="cards">
+    <div class="card">
+      <h3>code</h3>
+      <p>
+        Read <a href="https://github.com/gkjuwon-tech/zeon-0.1/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>,
+        pick a
+        <a href="https://github.com/gkjuwon-tech/zeon-0.1/issues?q=is%3Aopen+label%3A%22good+first+issue%22">good first issue</a>,
+        open a PR against the
+        <a href="https://github.com/gkjuwon-tech/zeon-0.1/blob/main/.github/pull_request_template.md">template</a>.
+      </p>
+    </div>
+    <div class="card">
+      <h3>research</h3>
+      <p>
+        Have a strong opinion on slots-vs-mixture-of-experts, on
+        sparse vs dense routing, on RL vs supervised halt? Open a
+        <a href="https://github.com/gkjuwon-tech/zeon-0.1/issues/new?template=research_proposal.md">research proposal</a>
+        — we argue about the design <em>before</em> the code exists.
+      </p>
+    </div>
+    <div class="card">
+      <h3>just read</h3>
+      <p>
+        Following along is also valid. Star the repo, watch the
+        roadmap, send us your critique when we publish numbers and
+        we'll engage with it.
+      </p>
+    </div>
+  </div>
+
+  <p class="dim">
+    Argue with the <strong>idea</strong>. Don't argue with the
+    <strong>person</strong>. The full house rules are in
+    <a href="https://github.com/gkjuwon-tech/zeon-0.1/blob/main/CODE_OF_CONDUCT.md">CODE_OF_CONDUCT.md</a>.
+  </p>
+</section>
+
+<hr class="rule">
+
+<section id="faq">
+  <h2>// faq</h2>
+
+  <details open>
+    <summary>Q. Isn't this just a Universal Transformer / PonderNet rebrand?</summary>
+    <p>
+      Phase 0 is, on purpose. Phase 0 sits inside the UT ∩ PonderNet
+      ∩ Recurrent-Depth-Transformer intersection deliberately — it's
+      the baseline we have to beat. The actual bet starts at Phase 1
+      (structured workspace), and the bet sharpens at Phase 2
+      (learned operator library, sparse top-k routing). If after
+      Phase 2 we still can't show specialisation patterns and
+      ablation-driven score drops, the thesis is in trouble and we'll
+      say so.
+    </p>
+  </details>
+
+  <details>
+    <summary>Q. What stops slots from collapsing into the same vector?</summary>
+    <p>
+      Three things, increasing in strength: (1) per-slot learned
+      role embeddings break symmetry at init so gradient has
+      something to specialise <em>from</em>; (2) a diversity loss
+      penalising mean off-diagonal slot cosine similarity; (3) if
+      both fail, Phase 1's fallback is to introduce
+      <a href="https://arxiv.org/abs/2006.15055">Slot Attention</a>-style
+      competition for input mass. The diversity-loss synthetic test
+      lives in <code>tests/test_workspace.py</code>.
+    </p>
+  </details>
+
+  <details>
+    <summary>Q. How is the workspace contribution made bit-for-bit identical to Phase 0 at init?</summary>
+    <p>
+      It isn't, and that's deliberate. The textbook trick is to
+      zero-initialise the output projection so the residual is exactly
+      zero. But that <em>also</em> zeros the gradient on every
+      upstream workspace projection (LoRA-style dead-branch trap), so
+      no workspace parameter ever learns. We chose instead to make
+      the workspace output a <em>small</em> perturbation at init (≈
+      5–15% relative norm in the unit-test config) and provide the
+      ablation guarantee at the flag level: <code>use_workspace=False</code>
+      → the module is literally not in the graph. There's a 30-line
+      essay about this in <code>zeon/workspace.py</code>.
+    </p>
+  </details>
+
+  <details>
+    <summary>Q. Inference cost?</summary>
+    <p>
+      Hard ceiling: 5× the base model. Past that, ZEON is no longer
+      an interesting bet — a bigger base model is just cheaper. Our
+      Phase 6 (self-distillation in latent space) exists specifically
+      to compress mean step-count back down once the slow Phase 4 +
+      Phase 5 versions have trained.
+    </p>
+  </details>
+
+  <details>
+    <summary>Q. What base model are you transplanting from?</summary>
+    <p>
+      Smoke tests are on Qwen2.5-1.5B because it fits one consumer
+      GPU; transplant code is generic over Llama-style architectures.
+      The choice of base is deliberately a <em>variable</em> — Phase
+      7 success criteria specify "at parameter-matched comparison",
+      not "at base-specific comparison".
+    </p>
+  </details>
+
+  <details>
+    <summary>Q. What if this doesn't work?</summary>
+    <p>
+      Then we publish the failure, in detail, with numbers. We have
+      explicit "if it falls over" exits at every phase. The least
+      interesting outcome of ZEON is a 12-month ablation study of
+      what <em>doesn't</em> work for adding structured latent
+      reasoning to a frozen transformer — and even that is more
+      useful than another "we scaled it harder" post.
+    </p>
+  </details>
+
+  <details>
+    <summary>Q. Can I use this in production?</summary>
+    <p>
+      No. v0.1 doesn't even have validated benchmark numbers yet.
+      We are not at "ship it" — we are at "argue with the design".
+    </p>
+  </details>
+
+  <details>
+    <summary>Q. Why the typos and slightly-off grammar?</summary>
+    <p>
+      Because we wrote this ourselves, late at night, and we didn't
+      pass it through a copy-editor. The roadmap is the roadmap; the
+      grammar is just garnish.
+    </p>
+  </details>
+</section>
+
+<hr class="rule">
+
+<footer>
+  <pre class="ascii dim">
+            ____  _   _  ____    _   _  ___
+           |  _ \| | | |/ ___|  | | | |/ _ \
+           | |_) | |_| | |      | |_| | | | |
+           |  __/|  _  | |___   |  _  | |_| |
+           |_|   |_| |_|\____|  |_| |_|\___/
+  </pre>
+
+  <p class="footer-meta">
+    code: <a href="https://github.com/gkjuwon-tech/zeon-0.1">github.com/gkjuwon-tech/zeon-0.1</a>
+    &nbsp;·&nbsp;
+    license: see repo &nbsp;·&nbsp;
+    built late at night, in a terminal, by people who think
+    transformers should think harder, not just bigger.
+  </p>
+
+  <p class="footer-meta dim">
+    don't be the person adding one more spoon of seasoning.<br>
+    be the person building a virtual machine in latent space.
+  </p>
+</footer>
+
+</main>
+
+</body>
+</html>
